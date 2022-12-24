@@ -53,6 +53,8 @@ func Run() error {
 		if err != nil {
 			return fmt.Errorf("failed to get sa key based creds: %w", err)
 		}
+	default:
+		creds = ycsdk.InstanceServiceAccount()
 	}
 
 	ctx := context.Background()
