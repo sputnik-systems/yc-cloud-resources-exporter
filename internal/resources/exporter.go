@@ -80,6 +80,7 @@ func Run() error {
 			prometheus.DefaultGatherer, promhttp.HandlerOpts{})
 		handler.ServeHTTP(w, r)
 	})
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {})
 	return http.ListenAndServe(":8080", nil)
 }
 

@@ -1,0 +1,16 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "yc-cloud-resources-exporter.fullname" . }}
+  labels:
+    {{- include "yc-cloud-resources-exporter.labels" . | nindent 4 }}
+spec:
+  endpoints:
+  - port: http
+    interval: {{ .Values.metrics.serviceMonitor.interval }}
+    scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+  selector:
+    matchLabels:
+      {{- include "yc-cloud-resources-exporter.selectorLabels" . | nindent 6 }}
+{{- end }}
