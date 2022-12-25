@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	computev1 "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	clickhousev1 "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1"
 	postgresqlv1 "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/postgresql/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
@@ -20,6 +21,7 @@ import (
 )
 
 var (
+	instanceInfoMetric                                    *prometheus.GaugeVec
 	coresMetric, memoryMetric                             *prometheus.GaugeVec
 	diskSizeMetric                                        *prometheus.GaugeVec
 	clickhouseClusterMetric, clickhouseHostDiskSizeMetric *prometheus.GaugeVec
@@ -105,170 +107,199 @@ func getFolderIds() ([]string, error) {
 }
 
 func updateComputeInstanceMetrics(ctx context.Context, sdk *ycsdk.SDK, folderIds []string) {
+	instances := make([]*computev1.Instance, 0)
 	for _, folderId := range folderIds {
-		instances, err := listComputeInstances(ctx, sdk.Compute().Instance(), folderId)
+		result, err := listComputeInstances(ctx, sdk.Compute().Instance(), folderId)
 		if err != nil {
 			log.Printf("failed to list compute instances: %s", err)
 		}
 
-		if coresMetric != nil {
-			prometheus.Unregister(coresMetric)
-		}
-		if memoryMetric != nil {
-			prometheus.Unregister(memoryMetric)
-		}
-		coresMetric = getComputeInstanceCoresGaugeVec()
-		memoryMetric = getComputeInstanceMemoryGaugeVec()
-		prometheus.MustRegister(coresMetric)
-		prometheus.MustRegister(memoryMetric)
+		instances = append(instances, result...)
+	}
 
-		for _, instance := range instances {
-			id := instance.GetId()
-			name := instance.GetName()
-			status := strings.ToLower(instance.GetStatus().String())
-			platformId := instance.GetPlatformId()
-			resources := instance.GetResources()
-			coresMetric.With(prometheus.Labels{
-				"folder_id":     folderId,
-				"id":            id,
-				"name":          name,
-				"status":        status,
-				"platform_id":   platformId,
-				"core_fraction": strconv.FormatInt(int64(resources.GetCoreFraction()), 10),
-			}).Set(float64(resources.GetCores()))
-			memoryMetric.With(prometheus.Labels{
-				"folder_id":   folderId,
-				"id":          id,
-				"name":        name,
-				"status":      status,
-				"platform_id": platformId,
-			}).Set(float64(resources.GetMemory()))
-		}
+	if instanceInfoMetric != nil {
+		prometheus.Unregister(instanceInfoMetric)
+	}
+	if coresMetric != nil {
+		prometheus.Unregister(coresMetric)
+	}
+	if memoryMetric != nil {
+		prometheus.Unregister(memoryMetric)
+	}
+	instanceInfoMetric = getComputeInstanceInfoGaugeVec()
+	coresMetric = getComputeInstanceCoresGaugeVec()
+	memoryMetric = getComputeInstanceMemoryGaugeVec()
+	prometheus.MustRegister(instanceInfoMetric)
+	prometheus.MustRegister(coresMetric)
+	prometheus.MustRegister(memoryMetric)
+
+	for _, instance := range instances {
+		folderId := instance.GetFolderId()
+		id := instance.GetId()
+		name := instance.GetName()
+		status := strings.ToLower(instance.GetStatus().String())
+		platformId := instance.GetPlatformId()
+		resources := instance.GetResources()
+		coreFraction := strconv.FormatInt(int64(resources.GetCoreFraction()), 10)
+		preemptible := strconv.FormatBool(instance.GetSchedulingPolicy().GetPreemptible())
+		instanceInfoMetric.With(prometheus.Labels{
+			"folder_id":     folderId,
+			"id":            id,
+			"name":          name,
+			"status":        status,
+			"platform_id":   platformId,
+			"core_fraction": coreFraction,
+			"preemptible":   preemptible,
+		}).Set(1)
+		coresMetric.With(prometheus.Labels{
+			"folder_id":     folderId,
+			"id":            id,
+			"name":          name,
+			"status":        status,
+			"platform_id":   platformId,
+			"core_fraction": coreFraction,
+			"preemptible":   preemptible,
+		}).Set(float64(resources.GetCores()))
+		memoryMetric.With(prometheus.Labels{
+			"folder_id":   folderId,
+			"id":          id,
+			"name":        name,
+			"status":      status,
+			"platform_id": platformId,
+			"preemptible": preemptible,
+		}).Set(float64(resources.GetMemory()))
 	}
 
 	wg.Done()
 }
 
 func updateComputeDiskMetrics(ctx context.Context, sdk *ycsdk.SDK, folderIds []string) {
+	disks := make([]*computev1.Disk, 0)
 	for _, folderId := range folderIds {
-		disks, err := listComputeDisks(ctx, sdk.Compute().Disk(), folderId)
+		result, err := listComputeDisks(ctx, sdk.Compute().Disk(), folderId)
 		if err != nil {
 			log.Printf("failed to list compute disks: %s", err)
 		}
 
-		if diskSizeMetric != nil {
-			prometheus.Unregister(diskSizeMetric)
-		}
-		diskSizeMetric = getComputeDiskSizeGaugeVec()
-		prometheus.MustRegister(diskSizeMetric)
+		disks = append(disks, result...)
+	}
 
-		for _, disk := range disks {
-			diskSizeMetric.With(prometheus.Labels{
-				"folder_id": folderId,
-				"id":        disk.GetId(),
-				"name":      disk.GetName(),
-				"type_id":   disk.GetTypeId(),
-			}).Set(float64(disk.GetSize()))
-		}
+	if diskSizeMetric != nil {
+		prometheus.Unregister(diskSizeMetric)
+	}
+	diskSizeMetric = getComputeDiskSizeGaugeVec()
+	prometheus.MustRegister(diskSizeMetric)
+
+	for _, disk := range disks {
+		diskSizeMetric.With(prometheus.Labels{
+			"folder_id": disk.GetFolderId(),
+			"id":        disk.GetId(),
+			"name":      disk.GetName(),
+			"type_id":   disk.GetTypeId(),
+		}).Set(float64(disk.GetSize()))
 	}
 
 	wg.Done()
 }
 
 func updateManagedClickhouseMetrics(ctx context.Context, sdk *ycsdk.SDK, folderIds []string) {
+	clusters := make([]*clickhousev1.Cluster, 0)
 	for _, folderId := range folderIds {
-		clusters, err := listManagedClickhouseClusters(ctx, sdk.MDB().Clickhouse().Cluster(), folderId)
+		result, err := listManagedClickhouseClusters(ctx, sdk.MDB().Clickhouse().Cluster(), folderId)
 		if err != nil {
 			log.Printf("failed to list clickhouse clusters: %s", err)
 		}
 
-		if clickhouseClusterMetric != nil {
-			prometheus.Unregister(clickhouseClusterMetric)
-		}
-		clickhouseClusterMetric = getClickhouseClusterGaugeVec()
-		prometheus.MustRegister(clickhouseClusterMetric)
+		clusters = append(clusters, result...)
+	}
 
-		hosts := make([]*clickhousev1.Host, 0)
-		for _, cluster := range clusters {
-			clickhouseClusterMetric.With(prometheus.Labels{
-				"folder_id": folderId,
-				"id":        cluster.GetId(),
-				"name":      cluster.GetName(),
-				"status":    strings.ToLower(cluster.GetStatus().String()),
-			}).Set(1)
+	if clickhouseClusterMetric != nil {
+		prometheus.Unregister(clickhouseClusterMetric)
+	}
+	clickhouseClusterMetric = getClickhouseClusterInfoGaugeVec()
+	prometheus.MustRegister(clickhouseClusterMetric)
 
-			chosts, err := listManagedClickhouseHosts(ctx, sdk.MDB().Clickhouse().Cluster(), cluster)
-			if err != nil {
-				log.Printf("failed to list clickhouse cluster hosts: %s", err)
-			}
-			hosts = append(hosts, chosts...)
-		}
+	hosts := make([]*clickhousev1.Host, 0)
+	for _, cluster := range clusters {
+		clickhouseClusterMetric.With(prometheus.Labels{
+			"folder_id": cluster.GetFolderId(),
+			"id":        cluster.GetId(),
+			"name":      cluster.GetName(),
+			"status":    strings.ToLower(cluster.GetStatus().String()),
+		}).Set(1)
 
-		if clickhouseHostDiskSizeMetric != nil {
-			prometheus.Unregister(clickhouseHostDiskSizeMetric)
+		chosts, err := listManagedClickhouseHosts(ctx, sdk.MDB().Clickhouse().Cluster(), cluster)
+		if err != nil {
+			log.Printf("failed to list clickhouse cluster hosts: %s", err)
 		}
-		clickhouseHostDiskSizeMetric = getClickhouseHostDiskSizeGaugeVec()
-		prometheus.MustRegister(clickhouseHostDiskSizeMetric)
-		for _, host := range hosts {
-			resources := host.GetResources()
-			clickhouseHostDiskSizeMetric.With(prometheus.Labels{
-				"folder_id":          folderId,
-				"name":               host.GetName(),
-				"type":               strings.ToLower(host.GetType().String()),
-				"resource_preset_id": resources.GetResourcePresetId(),
-				"disk_type_id":       resources.GetDiskTypeId(),
-				"cluster_id":         strings.ToLower(host.GetClusterId()),
-			}).Set(float64(resources.GetDiskSize()))
-		}
+		hosts = append(hosts, chosts...)
+	}
+
+	if clickhouseHostDiskSizeMetric != nil {
+		prometheus.Unregister(clickhouseHostDiskSizeMetric)
+	}
+	clickhouseHostDiskSizeMetric = getClickhouseHostDiskSizeGaugeVec()
+	prometheus.MustRegister(clickhouseHostDiskSizeMetric)
+	for _, host := range hosts {
+		resources := host.GetResources()
+		clickhouseHostDiskSizeMetric.With(prometheus.Labels{
+			"name":               host.GetName(),
+			"type":               strings.ToLower(host.GetType().String()),
+			"resource_preset_id": resources.GetResourcePresetId(),
+			"disk_type_id":       resources.GetDiskTypeId(),
+			"cluster_id":         strings.ToLower(host.GetClusterId()),
+		}).Set(float64(resources.GetDiskSize()))
 	}
 
 	wg.Done()
 }
 
 func updateManagedPostgresMetrics(ctx context.Context, sdk *ycsdk.SDK, folderIds []string) {
+	clusters := make([]*postgresqlv1.Cluster, 0)
 	for _, folderId := range folderIds {
-		clusters, err := listManagedPostgresClusters(ctx, sdk.MDB().PostgreSQL().Cluster(), folderId)
+		result, err := listManagedPostgresClusters(ctx, sdk.MDB().PostgreSQL().Cluster(), folderId)
 		if err != nil {
 			log.Printf("failed to list postgres clusters: %s", err)
 		}
 
-		if postgresClusterMetric != nil {
-			prometheus.Unregister(postgresClusterMetric)
-		}
-		postgresClusterMetric = getPostgresClusterGaugeVec()
-		prometheus.MustRegister(postgresClusterMetric)
+		clusters = append(clusters, result...)
+	}
 
-		hosts := make([]*postgresqlv1.Host, 0)
-		for _, cluster := range clusters {
-			postgresClusterMetric.With(prometheus.Labels{
-				"folder_id": folderId,
-				"id":        cluster.GetId(),
-				"name":      cluster.GetName(),
-				"status":    strings.ToLower(cluster.GetStatus().String()),
-			}).Set(1)
+	if postgresClusterMetric != nil {
+		prometheus.Unregister(postgresClusterMetric)
+	}
+	postgresClusterMetric = getPostgresClusterInfoGaugeVec()
+	prometheus.MustRegister(postgresClusterMetric)
 
-			chosts, err := listManagedPostgresHosts(ctx, sdk.MDB().PostgreSQL().Cluster(), cluster)
-			if err != nil {
-				log.Printf("failed to list postgres cluster hosts: %s", err)
-			}
-			hosts = append(hosts, chosts...)
-		}
+	hosts := make([]*postgresqlv1.Host, 0)
+	for _, cluster := range clusters {
+		postgresClusterMetric.With(prometheus.Labels{
+			"folder_id": cluster.GetFolderId(),
+			"id":        cluster.GetId(),
+			"name":      cluster.GetName(),
+			"status":    strings.ToLower(cluster.GetStatus().String()),
+		}).Set(1)
 
-		if postgresHostDiskSizeMetric != nil {
-			prometheus.Unregister(postgresHostDiskSizeMetric)
+		chosts, err := listManagedPostgresHosts(ctx, sdk.MDB().PostgreSQL().Cluster(), cluster)
+		if err != nil {
+			log.Printf("failed to list postgres cluster hosts: %s", err)
 		}
-		postgresHostDiskSizeMetric = getPostgresHostDiskSizeGaugeVec()
-		prometheus.MustRegister(postgresHostDiskSizeMetric)
-		for _, host := range hosts {
-			resources := host.GetResources()
-			postgresHostDiskSizeMetric.With(prometheus.Labels{
-				"folder_id":          folderId,
-				"name":               host.GetName(),
-				"resource_preset_id": resources.GetResourcePresetId(),
-				"disk_type_id":       resources.GetDiskTypeId(),
-				"cluster_id":         strings.ToLower(host.GetClusterId()),
-			}).Set(float64(resources.GetDiskSize()))
-		}
+		hosts = append(hosts, chosts...)
+	}
+
+	if postgresHostDiskSizeMetric != nil {
+		prometheus.Unregister(postgresHostDiskSizeMetric)
+	}
+	postgresHostDiskSizeMetric = getPostgresHostDiskSizeGaugeVec()
+	prometheus.MustRegister(postgresHostDiskSizeMetric)
+	for _, host := range hosts {
+		resources := host.GetResources()
+		postgresHostDiskSizeMetric.With(prometheus.Labels{
+			"name":               host.GetName(),
+			"resource_preset_id": resources.GetResourcePresetId(),
+			"disk_type_id":       resources.GetDiskTypeId(),
+			"cluster_id":         strings.ToLower(host.GetClusterId()),
+		}).Set(float64(resources.GetDiskSize()))
 	}
 
 	wg.Done()
