@@ -29,7 +29,7 @@ func getComputeDiskSizeGaugeVec() *prometheus.GaugeVec {
 	return prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "yc_compute_disk_size",
 		Help: "The total size of requested disks",
-	}, []string{"folder_id", "id", "name", "type_id"})
+	}, []string{"folder_id", "id", "instance_id", "name", "type_id"})
 }
 
 func getClickhouseClusterInfoGaugeVec() *prometheus.GaugeVec {

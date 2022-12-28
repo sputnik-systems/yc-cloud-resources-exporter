@@ -191,12 +191,15 @@ func updateComputeDiskMetrics(ctx context.Context, sdk *ycsdk.SDK, folderIds []s
 	prometheus.MustRegister(diskSizeMetric)
 
 	for _, disk := range disks {
-		diskSizeMetric.With(prometheus.Labels{
-			"folder_id": disk.GetFolderId(),
-			"id":        disk.GetId(),
-			"name":      disk.GetName(),
-			"type_id":   disk.GetTypeId(),
-		}).Set(float64(disk.GetSize()))
+		for _, instanceId := range disk.GetInstanceIds() {
+			diskSizeMetric.With(prometheus.Labels{
+				"folder_id":   disk.GetFolderId(),
+				"id":          disk.GetId(),
+				"instance_id": instanceId,
+				"name":        disk.GetName(),
+				"type_id":     disk.GetTypeId(),
+			}).Set(float64(disk.GetSize()))
+		}
 	}
 
 	wg.Done()

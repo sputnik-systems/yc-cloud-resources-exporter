@@ -9,6 +9,7 @@ RUN go mod download -x
 
 COPY . .
 RUN go build -o ./yc-resources-exporter ./cmd/resources
+RUN go build -o ./yc-price-exporter ./cmd/pricing
 
 
 FROM ubuntu
@@ -19,5 +20,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/yc-resources-exporter /usr/local/bin/
+COPY --from=build /app/yc-price-exporter /usr/local/bin/
 
 ENTRYPOINT ["/usr/local/bin/yc-resources-exporter"]

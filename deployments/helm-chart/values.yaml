@@ -37,7 +37,9 @@ securityContext: {}
 
 service:
   type: ClusterIP
-  port: 80
+  
+  resourcesMetricsPort: 8080
+  pricingMetricsPort: 8081
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -65,6 +67,12 @@ metrics:
   serviceMonitor:
     enabled: false
 
-    interval: 5m
+    resourcesEndpoint:
+      interval: 5m
+      scrapeTimeout: 30s
+      metricRelabelings: []
 
-    scrapeTimeout: 30s
+    pricingEndpoint:
+      interval: 1h
+      scrapeTimeout: 30s
+      metricRelabelings: []

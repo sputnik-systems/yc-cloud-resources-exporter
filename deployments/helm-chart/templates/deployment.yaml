@@ -40,17 +40,38 @@ spec:
                   name: {{ include "yc-cloud-resources-exporter.fullname" . }}
                   key: "key.json"
           ports:
-            - name: http
+            - name: resources
               containerPort: 8080
               protocol: TCP
           livenessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: resources
           readinessProbe:
             httpGet:
               path: /healthz
-              port: http
+              port: resources
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: pricing
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /usr/local/bin/yc-price-exporter
+          ports:
+            - name: pricing
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: pricing
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: pricing
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

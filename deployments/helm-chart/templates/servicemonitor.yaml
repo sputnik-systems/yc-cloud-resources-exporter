@@ -7,9 +7,20 @@ metadata:
     {{- include "yc-cloud-resources-exporter.labels" . | nindent 4 }}
 spec:
   endpoints:
-  - port: http
-    interval: {{ .Values.metrics.serviceMonitor.interval }}
-    scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+  - port: resources
+    interval: {{ .Values.metrics.serviceMonitor.resourcesEndpoint.interval }}
+    scrapeTimeout: {{ .Values.metrics.serviceMonitor.resourcesEndpoint.scrapeTimeout }}
+    {{- with .Values.metrics.serviceMonitor.resourcesEndpoint.metricRelabelings }}
+    metricRelabelings:
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
+  - port: pricing
+    interval: {{ .Values.metrics.serviceMonitor.pricingEndpoint.interval }}
+    scrapeTimeout: {{ .Values.metrics.serviceMonitor.pricingEndpoint.scrapeTimeout }}
+    {{- with .Values.metrics.serviceMonitor.pricingEndpoint.metricRelabelings }}
+    metricRelabelings:
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
   selector:
     matchLabels:
       {{- include "yc-cloud-resources-exporter.selectorLabels" . | nindent 6 }}

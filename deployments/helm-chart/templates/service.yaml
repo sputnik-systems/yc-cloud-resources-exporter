@@ -7,9 +7,13 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: http
+    - port: {{ .Values.service.resourcesMetricsPort }}
+      targetPort: resources
       protocol: TCP
-      name: http
+      name: resources
+    - port: {{ .Values.service.pricingMetricsPort }}
+      targetPort: pricing
+      protocol: TCP
+      name: pricing
   selector:
     {{- include "yc-cloud-resources-exporter.selectorLabels" . | nindent 4 }}
