@@ -11,16 +11,16 @@ import (
 
 func main() {
 	cpuCost := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "yc_compute_instance_cpu_cost",
-		Help: "The cpu cost of compute instance (per hour)",
+		Name: "yc_compute_instance_cpu_cost_per_hour",
+		Help: "The cpu cost of compute instance per hour",
 	}, []string{"platform_id", "core_fraction", "preemptible"})
 	memoryCost := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "yc_compute_instance_memory_cost",
-		Help: "The memory cost of compute instance (per hour)",
+		Name: "yc_compute_instance_memory_cost_per_hour",
+		Help: "The memory cost of compute instance per hour",
 	}, []string{"platform_id", "preemptible"})
 	diskCost := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "yc_compute_disk_cost",
-		Help: "The disk cost of compute instance (per month)",
+		Name: "yc_compute_disk_cost_per_month",
+		Help: "The disk cost of compute instance per month",
 	}, []string{"type_id"})
 	// standard-v1
 	cpuCost.With(prometheus.Labels{"platform_id": "standard-v1", "core_fraction": "5", "preemptible": "false"}).Set(0.31)
